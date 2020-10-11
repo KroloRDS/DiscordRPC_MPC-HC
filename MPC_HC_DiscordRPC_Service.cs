@@ -1,10 +1,10 @@
 ﻿using System;
-using System.Net;
 using System.Text;
 using System.Timers;
 using System.Diagnostics;
 using System.ServiceProcess;
 using DiscordRPC;
+using HtmlAgilityPack;
 
 namespace MPC_HC_DiscordRPC_Service
 {
@@ -66,18 +66,16 @@ namespace MPC_HC_DiscordRPC_Service
 		//Gets values from MPC-HC web interface and creates discord status
 		private RichPresence GetStatus()
 		{
-			string htmlStr = GetHtmlString();
-			bool playing = GetVariable(htmlStr, "state").Equals("2");
-			if (string.IsNullOrEmpty(htmlStr))
-			{
-				return null;
-			}
+			bool playing = false;
+			string title = "";
+			string positionstring = "";
+			GetVariables(ref playing, ref title, ref positionstring);
 
 			return new RichPresence()
 			{
-				Details = GetVariable(htmlStr, "file"),
+				Details = title,
 				State = playing ? "Now Playing" : "Paused",
-				Timestamps = playing ? GetPlaybackStartTime(htmlStr) : new Timestamps(),
+				Timestamps = playing ? GetPlaybackStartTime(positionstring) : new Timestamps(),
 				Assets = new Assets()
 				{
 					LargeImageKey = "logo",
@@ -86,56 +84,50 @@ namespace MPC_HC_DiscordRPC_Service
 			};
 		}
 
-		//Download UTF-8 HTML string
-		private string GetHtmlString()
+		//Getting and parsing HTML to get values
+		private void GetVariables(ref bool playing, ref string title, ref string positionstring)
 		{
+			HtmlDocument doc;
+			var web = new HtmlWeb
+			{
+				OverrideEncoding = Encoding.UTF8
+			};
 			try
 			{
-				using (WebClient webClient = new WebClient())
-				{
-					webClient.Encoding = Encoding.UTF8;
-					return webClient.DownloadString(mpcUrl);
-				}
+				doc = web.Load(mpcUrl);
 			}
 			catch (Exception e)
 			{
 				eventLog.WriteEntry("Can't download HTML from MPC Web Interface: " + e.Message);
-				return "";
+				return;
 			}
-		}
 
-		//Gets variable value from html string
-		private string GetVariable(string htmlStr, string variableName)
-		{
-			//Variable name is paragraph element id
-			string startStr = variableName + "\">";
-			string endStr = "</p>";
-
-			//Search for substring contained within specific paragraph element
-			if (htmlStr.Contains(startStr) && htmlStr.Contains(endStr))
+			foreach (HtmlNode node in doc.DocumentNode.SelectNodes("//p[@id]"))
 			{
-				int startPos, endPos;
-				startPos = htmlStr.IndexOf(startStr, 0) + startStr.Length;
-				endPos = htmlStr.IndexOf(endStr, startPos);
-				return htmlStr.Substring(startPos, endPos - startPos);
+				switch (node.Id)
+				{
+					case "state":
+						playing = node.InnerText.Equals("2");
+						break;
+					case "file":
+						title = node.InnerText;
+						break;
+					case "positionstring":
+						positionstring = node.InnerText;
+						break;
+				}
 			}
-
-			eventLog.WriteEntry("Can't find value for variable name: " + variableName);
-			return "";
 		}
 
-		private Timestamps GetPlaybackStartTime(string htmlStr)
+		private Timestamps GetPlaybackStartTime(string positionstring)
 		{
-			string positionstring = GetVariable(htmlStr, "positionstring");
 			if (string.IsNullOrEmpty(positionstring))
 			{
 				return new Timestamps();
 			}
 
-			DateTime startTime = DateTime.UtcNow;
 			TimeSpan span = TimeSpan.Parse(positionstring);
-			startTime = startTime.Subtract(span);
-			return new Timestamps(startTime);
+			return new Timestamps(DateTime.UtcNow.Subtract(span));
 		}
 	}
 }
