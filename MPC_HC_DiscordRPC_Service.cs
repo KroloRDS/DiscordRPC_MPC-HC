@@ -36,8 +36,8 @@ namespace MPC_HC_DiscordRPC_Service
 			discordClient = new DiscordRpcClient(discordAppID);
 			discordClient.Initialize();
 
-			// Set up a timer that triggers every 5 seconds
-			Timer timer = new Timer(5000);
+			// Set up a timer that triggers every second
+			Timer timer = new Timer(1000);
 			timer.Elapsed += new ElapsedEventHandler(OnTimer);
 			timer.Start();
 		}
