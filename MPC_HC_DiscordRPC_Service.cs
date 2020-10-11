@@ -129,21 +129,43 @@ namespace MPC_HC_DiscordRPC_Service
 			title = title.Replace('_', ' ');
 
 			//Remove subgroup
-			if (Regex.IsMatch(title, @"\s*[\[(【].*[)\]】].*[^\s]"))
+			if (Regex.IsMatch(title, @"^\s*[\[(【].*[)\]】]"))
 			{
 				char[] chars = { ')', '】', ']' };
 				title = title.Substring(title.IndexOfAny(chars) + 1);
+				title = title.Trim();
 			}
 
-			//Remove metadata
-			Regex titleAndEpNumber = new Regex(@"^.+ [-–—−] \d+[^.]");
-			if (titleAndEpNumber.IsMatch(title))
+			//Don't parse stuff like 01.XXX
+			//it's common for songs to have title after track no.
+			//and we don't want to cut that
+			if (Regex.IsMatch(title, @"\d{1,3}\."))
 			{
-				Match match = titleAndEpNumber.Match(title);
-				title = title.Substring(match.Index, match.Length);
+				return title;
 			}
 
-			return title.Trim();
+			//Try to find episode no.
+			Match match;
+			Regex[] patterns = {
+				new Regex(@"[Ee][Pp]\.?\s?\d{1,4}"),
+				new Regex(@"[-–—−]\s?\d{1,4}")
+			};
+
+			//And remove stuff that comes after it
+			foreach (Regex pattern in patterns)
+			{
+				match = pattern.Match(title);
+				if (match.Success)
+				{
+					return title.Substring(0, match.Index + match.Length);
+				}
+			}
+
+			//Finally, if everything else fails remove everything after first digit group
+			//This won't work properly for stuff like "009 Sound System - Dreamscape", but oh well...
+			Regex digitGropuPattern = new Regex(@"\d{2,4}");
+			match = digitGropuPattern.Match(title);
+			return match.Success ? title.Substring(0, match.Index + match.Length) : title;
 		}
 
 		private Timestamps GetPlaybackStartTime(string positionstring)
