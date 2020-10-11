@@ -1,8 +1,11 @@
 ﻿using System;
+using System.IO;
 using System.Text;
 using System.Timers;
 using System.Diagnostics;
 using System.ServiceProcess;
+using System.Text.RegularExpressions;
+
 using DiscordRPC;
 using HtmlAgilityPack;
 
@@ -68,14 +71,14 @@ namespace MPC_HC_DiscordRPC_Service
 		{
 			bool playing = false;
 			string title = "";
-			string positionstring = "";
-			GetVariables(ref playing, ref title, ref positionstring);
+			Timestamps elapsedTime = null;
+			GetVariables(ref playing, ref title, ref elapsedTime);
 
 			return new RichPresence()
 			{
 				Details = title,
 				State = playing ? "Now Playing" : "Paused",
-				Timestamps = playing ? GetPlaybackStartTime(positionstring) : new Timestamps(),
+				Timestamps = playing ? elapsedTime : new Timestamps(),
 				Assets = new Assets()
 				{
 					LargeImageKey = "logo",
@@ -85,7 +88,7 @@ namespace MPC_HC_DiscordRPC_Service
 		}
 
 		//Getting and parsing HTML to get values
-		private void GetVariables(ref bool playing, ref string title, ref string positionstring)
+		private void GetVariables(ref bool playing, ref string title, ref Timestamps elapsedTime)
 		{
 			HtmlDocument doc;
 			var web = new HtmlWeb
@@ -110,13 +113,37 @@ namespace MPC_HC_DiscordRPC_Service
 						playing = node.InnerText.Equals("2");
 						break;
 					case "file":
-						title = node.InnerText;
+						title = ParseFilename(node.InnerText);
 						break;
 					case "positionstring":
-						positionstring = node.InnerText;
+						elapsedTime = GetPlaybackStartTime(node.InnerText);
 						break;
 				}
 			}
+		}
+
+		//Try to match popular file naming schemas and extract title and episode number
+		private string ParseFilename(string title)
+		{
+			title = Path.GetFileNameWithoutExtension(title);
+			title = title.Replace('_', ' ');
+
+			//Remove subgroup
+			if (Regex.IsMatch(title, @"\s*[\[(【].*[)\]】].*[^\s]"))
+			{
+				char[] chars = { ')', '】', ']' };
+				title = title.Substring(title.IndexOfAny(chars) + 1);
+			}
+
+			//Remove metadata
+			Regex titleAndEpNumber = new Regex(@"^.+ [-–—−] \d+");
+			if (titleAndEpNumber.IsMatch(title))
+			{
+				Match match = titleAndEpNumber.Match(title);
+				title = title.Substring(match.Index, match.Length);
+			}
+
+			return title.Trim();
 		}
 
 		private Timestamps GetPlaybackStartTime(string positionstring)
