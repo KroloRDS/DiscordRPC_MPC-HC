@@ -136,7 +136,7 @@ namespace MPC_HC_DiscordRPC_Service
 			}
 
 			//Remove metadata
-			Regex titleAndEpNumber = new Regex(@"^.+ [-–—−] \d+");
+			Regex titleAndEpNumber = new Regex(@"^.+ [-–—−] \d+[^.]");
 			if (titleAndEpNumber.IsMatch(title))
 			{
 				Match match = titleAndEpNumber.Match(title);
